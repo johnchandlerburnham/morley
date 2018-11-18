@@ -1,50 +1,107 @@
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE NoImplicitPrelude             #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE NoImplicitPrelude         #-}
 
 module Language.Michelson.Types where
 
-import           Data.Natural
+import           Data.Bool
+import qualified Data.ByteString as B
 import           Data.Maybe
-import           Data.Sequence as Seq
-import qualified Data.Text     as T
-import qualified Data.ByteString     as B
-import Text.Show
-import Prelude (Integer, (.), (++), Eq, Ord)
+import           Data.Natural
+import           Data.Sequence   as Seq
+import qualified Data.Text       as T
+import           Prelude         (Eq, Int, Integer, Ord, (++), (.))
+import           Text.Show
 
 
 -- smart contract
-data Contract = Contract Parameter Storage Code deriving Show
-
--- parameter
-data Parameter = Parameter Type deriving Show
-
-data Storage = Storage Type deriving Show
-
-data Code = Code Ops deriving Show
+--data Contract = Contract Parameter Storage Code
+--
+---- parameter
+--data Parameter = Parameter Type
+--
+--data Storage = Storage Type
+--
+--data Code = Code Ops
 
 -- element of a map
-data Element = Element Data Data deriving Show
+data Element k v = Element (Data k) (Data v) deriving Show
 
 -- data
-data Data where
-  Int        :: Integer -> Data
-  String     :: T.Text -> Data
-  Bytes      :: B.ByteString -> Data
-  Unit       :: Data
-  True       :: Data
-  False      :: Data
-  Pair       :: Data -> Data -> Data
-  Left       :: Data -> Data
-  Right      :: Data -> Data
-  Some       :: Data -> Data
-  None       :: Data
-  Seq        :: Seq Data -> Data
-  Map        :: Seq Element -> Data
-  DataOps    :: Ops -> Data
+data VarNote = NoVN | VN T.Text deriving Show
+
+data Data t where
+  Int        :: Integer -> VarNote -> Data (T_ct T_int)
+  String     :: T.Text -> Data (T_ct T_string)
+  Bytes      :: B.ByteString -> Data (T_ct T_bytes)
+  Unit       :: VarNote -> Data T_unit
+  True       :: VarNote -> Data (T_ct T_bool)
+  False      :: VarNote -> Data (T_ct T_bool)
+  Pair       :: VarNote -> Data a -> Data b -> Data (T_pair a b)
+  Left       :: VarNote -> Data a -> Data (T_or a T_any)
+  Right      :: VarNote -> Data a -> Data (T_or T_any a)
+  Some       :: VarNote -> Data a -> Data (T_option ('Type a NoTN NoFN))
+  None       :: VarNote -> Data (T_option ('Type T_any NoTN NoFN))
+  --List       :: VarNote -> Seq (Data a) -> Data (T_list a)
+  --Set        :: VarNote -> Seq (Data (T_ct a)) -> Data (T_set a)
+  --Map        :: Seq (Element k v) -> Data (Element k v)
+  -- DataOps    :: Ops -> Data Ops
+
+data Any = forall a. Show a => Any a
+
+instance Show Any where
+  show (Any a) = "Any " ++ (show a)
+
+instance Show (Data t) where
+  show (Int n vn) = "Int " ++ (show n) ++ " " ++ (show vn)
+  show _          = ""
+
+data TypeNote  = NoTN | TN T.Text deriving Show
+data FieldNote = NoFN | FN T.Text deriving Show
+
+data Type = Type T TypeNote FieldNote deriving Show
+
+--instance Show Type where
+--  show (Type (T_comparable ct) tn fn) = (show ct) ++ (show tn) ++ (show fn)
+--  show (Type t tn fn) = (show t) ++ (show tn) ++ (show fn)
+
+data T where
+  T_any        :: T
+  T_ct         :: CT -> T
+  T_key        :: T
+  T_unit       :: T
+  T_signature  :: T
+  T_option     :: Type -> T
+  T_list       :: T -> T
+  T_set        :: CT -> T
+  T_operation  :: T
+  T_address    :: T
+  T_contract   :: T -> T
+  T_pair       :: T -> T -> T
+  T_or         :: T -> T -> T
+  T_lambda     :: T -> T -> T
+  T_map        :: CT -> T -> T
+  T_big_map    :: CT -> T -> T
   deriving Show
 
+-- instance Show Comparable where
+--   show (Comparable t tn) = (show t) ++ (show tn)
+
+data CT where
+  T_int       :: CT
+  T_nat       :: CT
+  T_string    :: CT
+  T_bytes     :: CT
+  T_mutez     :: CT
+  T_bool      :: CT
+  T_key_hash  :: CT
+  T_timestamp :: CT
+  deriving Show
+
+{-
 -- instruction sequence
-data Ops = Ops { ops :: Seq Op } deriving Show
+data Ops = Ops { ops :: Seq Op }
 
 opsConcat :: Ops -> Ops -> Ops
 opsConcat x y = Ops ((ops x) Seq.>< (ops y))
@@ -86,7 +143,7 @@ data Op where
   DROP              :: Op
   DUP               :: VarNote -> Op
   SWAP              :: Op
-  PUSH              :: VarNote -> Type -> Data -> Op
+  PUSH              :: VarNote -> Type -> Data a -> Op
   SOME              :: TypeNote -> VarNote -> FieldNote
                        -> Op
   NONE              :: TypeNote -> VarNote -> FieldNote
@@ -165,70 +222,6 @@ data Op where
   SOURCE            :: VarNote -> Op
   SENDER            :: VarNote -> Op
   ADDRESS           :: VarNote -> Op
-  deriving Show
-
+-}
 -- type
-
-data TypeNote = TypeNote (Maybe T.Text) deriving (Show, Eq, Ord)
-data FieldNote = FieldNote (Maybe T.Text) deriving (Show, Eq, Ord)
-data VarNote = VarNote (Maybe T.Text) deriving (Show, Eq, Ord)
-
-data Type = Type T TypeNote FieldNote deriving Show
-
---instance Show Type where
---  show (Type (T_comparable ct) tn fn) = (show ct) ++ (show tn) ++ (show fn)
---  show (Type t tn fn) = (show t) ++ (show tn) ++ (show fn)
-
-data T where
-  T_comparable :: CT -> T
-  T_key        :: T
-  T_unit       :: T
-  T_signature  :: T
-  T_option     :: Type -> T
-  T_list       :: Type -> T
-  T_set        :: Comparable -> T
-  T_operation  :: T
-  T_address    :: T
-  T_contract   :: Type -> T
-  T_pair       :: Type -> Type -> T
-  T_or         :: Type -> Type -> T
-  T_lambda     :: Type -> Type -> T
-  T_map        :: Comparable -> Type -> T
-  T_big_map    :: Comparable -> Type -> T
-  deriving Show
-
--- comparable type
-data Comparable = Comparable CT TypeNote deriving Show
-
--- instance Show Comparable where
---   show (Comparable t tn) = (show t) ++ (show tn)
-
-data CT where
-  T_int       :: CT
-  T_nat       :: CT
-  T_string    :: CT
-  T_bytes     :: CT
-  T_mutez     :: CT
-  T_bool      :: CT
-  T_key_hash  :: CT
-  T_timestamp :: CT
-  deriving Show
-
--- Note type
-
---instance Show TypeNote where
---  show (TypeNote Nothing) = ""
---  show (TypeNote (Just tn)) = ':' : (T.unpack tn)
---
---instance Show FieldNote where
---  show (FieldNote Nothing) = ""
---  show (FieldNote (Just fn)) = '%' : (T.unpack fn)
---
---instance Show VarNote where
---  show (VarNote Nothing) = ""
---  show (VarNote (Just vn)) = '@' : (T.unpack vn)
-
-noTN = TypeNote Nothing
-noFN = FieldNote Nothing
-noVN = VarNote Nothing
 

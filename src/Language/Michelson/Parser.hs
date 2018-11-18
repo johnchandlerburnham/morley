@@ -769,7 +769,7 @@ ct = (symbol "int" >> return M.T_int)
 
 macro :: Parser M.Ops
 macro = cmpMac
-  <|> ifMac
+  <|> (try $ ifMac)
   <|> ifcmpMac
   <|> failMac
   <|> assert
